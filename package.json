@@ -1,0 +1,27 @@
+{
+  "name": "voxbloom-voice-lab",
+  "version": "1.1.0",
+  "description": "A private, local-first voice practice visualizer with real-time pitch, spectral balance, recordings, and offline support.",
+  "type": "module",
+  "private": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "test": "node --test",
+    "check": "node --check assets/app.js && node --check assets/analysis-worker.js && node --check src/audio-math.js && node --check src/recording-analysis.js && node --check sw.js"
+  },
+  "keywords": [
+    "voice-training",
+    "pitch",
+    "web-audio",
+    "transgender",
+    "privacy-first",
+    "pwa"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "pitchy": "4.1.0"
+  }
+}

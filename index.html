@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="VoxBloom 是一款隐私优先的声线练习可视化工具，提供实时音高、稳定度、目标区间、频谱重心与本地录音对比。"
+    />
+    <meta name="theme-color" content="#f2eee3" />
+    <meta name="color-scheme" content="light" />
+    <meta property="og:title" content="VoxBloom · 声线练习实验室" />
+    <meta
+      property="og:description"
+      content="看见音高、稳定度与频谱变化。录音只在浏览器本地处理，不上传。"
+    />
+    <meta property="og:type" content="website" />
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="assets/icon-192.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="assets/styles.css" />
+    <script src="assets/lucide.min.js" defer></script>
+    <script type="module" src="assets/app.js"></script>
+    <title>VoxBloom · 声线练习实验室</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#voice-lab">跳到声线练习台</a>
+
+    <div class="site-shell">
+      <header class="site-header">
+        <a class="brand" href="./" aria-label="VoxBloom 首页">
+          <span class="brand-mark" aria-hidden="true">
+            <i></i><i></i><i></i>
+          </span>
+          <span class="brand-copy">
+            <strong>VOXBLOOM</strong>
+            <small>VOICE PRACTICE LAB</small>
+          </span>
+        </a>
+
+        <div class="header-actions">
+          <span class="privacy-pill">
+            <i data-lucide="shield-check"></i>
+            只在本地
+          </span>
+          <button class="icon-button" id="install-button" type="button" aria-label="安装 VoxBloom" title="安装 VoxBloom" hidden>
+            <i data-lucide="download"></i>
+          </button>
+          <a class="icon-button" href="guide.html" aria-label="查看测量说明" title="查看测量说明">
+            <i data-lucide="book-open"></i>
+          </a>
+        </div>
+      </header>
+
+      <main>
+        <section class="intro" aria-labelledby="page-title">
+          <div>
+            <p class="eyebrow">VOICE SIGNAL / PRIVATE PRACTICE</p>
+            <h1 id="page-title">让声音的变化，<br /><em>被看见。</em></h1>
+          </div>
+          <div class="intro-copy">
+            <p>观察音高、稳定度和频谱重心，并在同一次练习里对比前后录音。</p>
+            <span>它不是性别评分，也不评价 passability。</span>
+          </div>
+        </section>
+
+        <section class="voice-lab" id="voice-lab" aria-labelledby="lab-title">
+          <aside class="control-panel">
+            <div class="panel-heading">
+              <p class="section-kicker">MICROPHONE</p>
+              <h2 id="lab-title">开始练习</h2>
+            </div>
+
+            <button class="mic-button" id="microphone-button" type="button">
+              <span class="mic-icon"><i data-lucide="mic"></i></span>
+              <span>
+                <strong id="microphone-button-label">启动麦克风</strong>
+                <small id="microphone-button-hint">点按后由浏览器请求权限</small>
+              </span>
+            </button>
+
+            <div class="input-level" aria-label="麦克风输入电平">
+              <div class="input-level-label">
+                <span>INPUT LEVEL</span>
+                <span id="level-db">— dBFS</span>
+              </div>
+              <div class="level-track"><span id="level-fill"></span></div>
+              <div class="signal-quality-row">
+                <span>信号质量</span>
+                <strong id="signal-quality">等待麦克风</strong>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <div class="control-label">
+                <span>练习模式</span>
+                <button class="info-button" id="mode-help" type="button" aria-label="查看练习提示">
+                  <i data-lucide="info"></i>
+                </button>
+              </div>
+              <div class="segmented-control" id="mode-control">
+                <button type="button" data-mode="sustain" class="is-active">持续 /a/</button>
+                <button type="button" data-mode="glide">滑音</button>
+                <button type="button" data-mode="phrase">短句</button>
+              </div>
+            </div>
+
+            <div class="control-group target-control">
+              <div class="control-label">
+                <span>练习区间</span>
+                <output id="target-range-label">145–220 Hz</output>
+              </div>
+              <label for="target-low">
+                <span>低端</span>
+                <input id="target-low" type="range" min="70" max="330" step="1" value="145" />
+                <output id="target-low-value">145 Hz</output>
+              </label>
+              <label for="target-high">
+                <span>高端</span>
+                <input id="target-high" type="range" min="80" max="400" step="1" value="220" />
+                <output id="target-high-value">220 Hz</output>
+              </label>
+              <p>区间由你设置，只用于本次练习命中率，不是医疗目标。</p>
+            </div>
+
+            <div class="control-group goal-control">
+              <div class="control-label">
+                <span>单次练习目标</span>
+                <output id="goal-duration-label">15 秒</output>
+              </div>
+              <div class="segmented-control goal-options" id="goal-options">
+                <button type="button" data-goal="10">10 秒</button>
+                <button type="button" data-goal="15" class="is-active">15 秒</button>
+                <button type="button" data-goal="30">30 秒</button>
+              </div>
+            </div>
+
+            <div class="control-group compact-control">
+              <label class="switch-row" for="smoothing-toggle">
+                <span>
+                  <strong>平滑读数</strong>
+                  <small>减少短时抖动</small>
+                </span>
+                <input id="smoothing-toggle" type="checkbox" checked />
+                <span class="switch" aria-hidden="true"></span>
+              </label>
+            </div>
+
+            <button class="reset-button" id="reset-session-button" type="button">
+              <i data-lucide="rotate-ccw"></i>
+              <span>重置本次数据</span>
+            </button>
+          </aside>
+
+          <div class="visual-panel">
+            <div class="stage-heading">
+              <div class="live-state" id="live-state">
+                <span class="live-dot"></span>
+                <span id="live-state-label">等待麦克风</span>
+              </div>
+              <div class="stage-tools">
+                <button class="stage-mic-button" id="stage-mic-button" type="button">
+                  <i data-lucide="mic"></i>
+                  <span id="stage-mic-label">开始</span>
+                </button>
+                <div class="session-clock" id="session-clock">00:00</div>
+              </div>
+            </div>
+            <div
+              class="session-progress"
+              role="progressbar"
+              aria-label="练习目标进度"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+            >
+              <span id="session-progress-fill"></span>
+            </div>
+
+            <div class="pitch-display">
+              <div class="pitch-primary">
+                <output id="current-note">—</output>
+                <div>
+                  <strong id="current-frequency">等待声音</strong>
+                  <span id="current-cents">开始后显示音分偏差</span>
+                </div>
+              </div>
+              <div class="pitch-meta">
+                <span>BRIGHTNESS</span>
+                <strong id="spectral-centroid">— Hz</strong>
+              </div>
+            </div>
+
+            <div class="canvas-shell">
+              <canvas id="voice-canvas" role="img" aria-label="实时音高轨迹与练习区间"></canvas>
+              <div class="canvas-empty" id="canvas-empty">
+                <i data-lucide="audio-lines"></i>
+                <p>允许麦克风后，发一个舒适、持续的元音。</p>
+              </div>
+              <div class="canvas-axis">
+                <span id="axis-high">—</span>
+                <span id="axis-mid">—</span>
+                <span id="axis-low">—</span>
+              </div>
+            </div>
+
+            <div class="practice-cue">
+              <span><i data-lucide="waves"></i> <strong id="mode-title">持续 /a/</strong></span>
+              <p id="mode-instruction">用平常音量持续发声，保持舒适，不压喉。</p>
+            </div>
+
+            <div class="live-metrics" aria-label="实时练习指标">
+              <div>
+                <span>平均音高</span>
+                <strong id="average-pitch">—</strong>
+              </div>
+              <div>
+                <span>区间命中</span>
+                <strong id="target-hit">—</strong>
+              </div>
+              <div>
+                <span>音高波动</span>
+                <strong id="pitch-deviation">—</strong>
+              </div>
+              <div>
+                <span>有效发声</span>
+                <strong id="voiced-time">0.0 s</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="compare-section" aria-labelledby="compare-title">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">BEFORE / AFTER</p>
+              <h2 id="compare-title">同一次练习里的 A/B 对照</h2>
+            </div>
+            <p>录音只保存在当前标签页内，刷新即消失。</p>
+          </div>
+
+          <div class="clip-grid">
+            <article class="clip-card" data-clip-slot="A">
+              <div class="clip-heading">
+                <span class="clip-letter">A</span>
+                <div>
+                  <h3>起始片段</h3>
+                  <p class="clip-duration" id="clip-a-duration">尚未录音</p>
+                </div>
+                <span class="clip-badge" id="clip-a-badge">EMPTY</span>
+              </div>
+              <canvas class="waveform-canvas" id="clip-a-wave" aria-label="片段 A 波形"></canvas>
+              <audio id="clip-a-audio" controls hidden></audio>
+              <div class="clip-metrics" id="clip-a-metrics" hidden></div>
+              <div class="clip-actions">
+                <button type="button" class="record-clip-button" data-record-slot="A">
+                  <i data-lucide="circle-dot"></i>
+                  <span>录制 A</span>
+                </button>
+                <a class="clip-link" id="clip-a-download" href="#" download="voxbloom-a.webm" hidden>
+                  <i data-lucide="download"></i>
+                  下载
+                </a>
+                <button class="clip-link delete-clip" type="button" data-delete-slot="A" hidden>
+                  <i data-lucide="trash-2"></i>
+                  删除
+                </button>
+              </div>
+            </article>
+
+            <article class="clip-card" data-clip-slot="B">
+              <div class="clip-heading">
+                <span class="clip-letter">B</span>
+                <div>
+                  <h3>练习后片段</h3>
+                  <p class="clip-duration" id="clip-b-duration">尚未录音</p>
+                </div>
+                <span class="clip-badge" id="clip-b-badge">EMPTY</span>
+              </div>
+              <canvas class="waveform-canvas" id="clip-b-wave" aria-label="片段 B 波形"></canvas>
+              <audio id="clip-b-audio" controls hidden></audio>
+              <div class="clip-metrics" id="clip-b-metrics" hidden></div>
+              <div class="clip-actions">
+                <button type="button" class="record-clip-button" data-record-slot="B">
+                  <i data-lucide="circle-dot"></i>
+                  <span>录制 B</span>
+                </button>
+                <a class="clip-link" id="clip-b-download" href="#" download="voxbloom-b.webm" hidden>
+                  <i data-lucide="download"></i>
+                  下载
+                </a>
+                <button class="clip-link delete-clip" type="button" data-delete-slot="B" hidden>
+                  <i data-lucide="trash-2"></i>
+                  删除
+                </button>
+              </div>
+            </article>
+          </div>
+
+          <div class="ab-comparison" id="ab-comparison" hidden>
+            <div class="ab-comparison-heading">
+              <div>
+                <span>B − A</span>
+                <h3>片段差值</h3>
+              </div>
+              <p>只比较两段录音的信号指标，不判断哪一段“更好”。</p>
+            </div>
+            <div class="ab-comparison-values">
+              <div><span>平均音高</span><strong id="compare-pitch">—</strong></div>
+              <div><span>音高波动</span><strong id="compare-deviation">—</strong></div>
+              <div><span>区间命中</span><strong id="compare-hit">—</strong></div>
+              <div><span>有效发声</span><strong id="compare-voiced">—</strong></div>
+            </div>
+          </div>
+
+          <div class="recording-bar">
+            <span class="recording-dot" id="recording-dot"></span>
+            <p id="recording-status">选择一个片段开始录音，单段最长 15 秒。</p>
+            <button class="text-button" id="stop-recording-button" type="button" hidden>
+              <i data-lucide="square"></i>
+              停止录音
+            </button>
+          </div>
+        </section>
+
+        <section class="history-section" aria-labelledby="history-title">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">LOCAL PROGRESS</p>
+              <h2 id="history-title">练习摘要</h2>
+            </div>
+            <div class="history-actions">
+              <button class="text-button" id="export-history-button" type="button">
+                <i data-lucide="file-down"></i>
+                <span>导出 CSV</span>
+              </button>
+              <button class="text-button" id="clear-history-button" type="button">
+                <i data-lucide="trash-2"></i>
+                <span>清空摘要</span>
+              </button>
+            </div>
+          </div>
+          <div class="history-list" id="history-list"></div>
+          <p class="history-empty" id="history-empty">结束一次有效练习后，这里会出现本机摘要。</p>
+        </section>
+
+        <section class="boundary-panel">
+          <div>
+            <p class="section-kicker">WHAT THE NUMBERS MEAN</p>
+            <h2>测量声音，不定义声音。</h2>
+          </div>
+          <div class="boundary-items">
+            <article>
+              <span>01</span>
+              <h3>频谱重心不是共鸣位置</h3>
+              <p>它只描述高频能量分布，不能直接等同于“头声”“胸声”或某种性别特征。</p>
+            </article>
+            <article>
+              <span>02</span>
+              <h3>目标区间不是疗效标准</h3>
+              <p>舒适度、可持续性和个人表达比追逐某个数字更重要。</p>
+            </article>
+            <article>
+              <span>03</span>
+              <h3>不是语音治疗</h3>
+              <p>如果练习引起疼痛、嘶哑或持续不适，应停止并咨询合格专业人员。</p>
+            </article>
+          </div>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <p>VOXBLOOM v1.1 · 本地音频分析</p>
+        <p>不评价性别、passability 或治疗效果。</p>
+        <span id="year"></span>
+      </footer>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <noscript>
+      <div class="noscript">VoxBloom 需要 JavaScript 和 Web Audio 才能运行。</div>
+    </noscript>
+  </body>
+</html>

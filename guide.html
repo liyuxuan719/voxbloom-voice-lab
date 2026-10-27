@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f2eee3" />
+    <meta
+      name="description"
+      content="VoxBloom 的音高、音分、频谱重心、目标命中率与本地录音说明。"
+    />
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="assets/styles.css" />
+    <script src="assets/lucide.min.js" defer></script>
+    <script src="assets/guide.js" defer></script>
+    <title>测量说明 · VoxBloom</title>
+  </head>
+  <body class="guide-document">
+    <div class="site-shell">
+      <header class="site-header">
+        <a class="brand" href="./" aria-label="返回 VoxBloom">
+          <span class="brand-mark" aria-hidden="true">
+            <i></i><i></i><i></i>
+          </span>
+          <span class="brand-copy">
+            <strong>VOXBLOOM</strong>
+            <small>VOICE PRACTICE LAB</small>
+          </span>
+        </a>
+        <a class="text-button back-link" href="./">
+          <i data-lucide="arrow-left"></i>
+          <span>返回练习台</span>
+        </a>
+      </header>
+
+      <main class="guide-main">
+        <section class="guide-hero">
+          <p class="eyebrow">MEASUREMENT &amp; SAFETY</p>
+          <h1>看见信号，<br /><em>不定义声音。</em></h1>
+          <p>
+            VoxBloom 描述麦克风收到的声音信号。它不判断性别、passability、治疗效果或某种声音是否“正确”。
+          </p>
+        </section>
+
+        <div class="guide-layout">
+          <aside class="guide-index" aria-label="本页目录">
+            <p>ON THIS PAGE</p>
+            <a href="#pitch">01 / 音高与音分</a>
+            <a href="#target">02 / 练习区间</a>
+            <a href="#brightness">03 / 频谱重心</a>
+            <a href="#stability">04 / 稳定度</a>
+            <a href="#privacy">05 / 隐私与录音</a>
+            <a href="#safety">06 / 舒适与安全</a>
+          </aside>
+
+          <article class="guide-body">
+            <section id="pitch">
+              <span class="guide-number">01</span>
+              <div>
+                <h2>音高与音分</h2>
+                <p>
+                  音高是基频，以赫兹（Hz）显示。音分（cent）表示当前音高与最近十二平均律音符之间的距离。一个半音是 100 cents。
+                </p>
+                <div class="equation-block">
+                  <code>midi = 69 + 12 × log₂(Hz / 440)</code>
+                  <code>cents = 1200 × log₂(当前 Hz / 最近音符 Hz)</code>
+                </div>
+                <p>
+                  音高检测可能受到环境噪声、爆破音、气声和泛音影响。读数短暂跳动并不表示声音本身不稳定。
+                </p>
+              </div>
+            </section>
+
+            <section id="target">
+              <span class="guide-number">02</span>
+              <div>
+                <h2>练习区间</h2>
+                <p>
+                  练习区间由使用者自行设置。命中率只表示有效发声帧中有多少落在该区间，不代表声音质量、女性化程度或治疗效果。
+                </p>
+                <div class="guide-callout">
+                  <strong>舒适、可持续、可重复，比数字更重要。</strong>
+                  <p>如果某个音高需要挤压、屏息或持续用力才能维持，就不适合作为日常练习区间。</p>
+                </div>
+              </div>
+            </section>
+
+            <section id="brightness">
+              <span class="guide-number">03</span>
+              <div>
+                <h2>频谱重心不是共鸣位置</h2>
+                <p>
+                  频谱重心是频带能量加权后的平均频率，用于观察声音中高频能量的大致比例。它受到麦克风、房间、音量、辅音和音色共同影响。
+                </p>
+                <p>
+                  它不能直接等同于“头声”“胸声”、声道长度、喉部位置或任何性别特征。不要用单一频谱重心追逐某种声音标签。
+                </p>
+              </div>
+            </section>
+
+            <section id="stability">
+              <span class="guide-number">04</span>
+              <div>
+                <h2>稳定度与会话摘要</h2>
+                <p>
+                  “音高波动”使用有效发声点与最近音符之间音分偏差的标准差。数值越小，说明这一次读音高更集中；它不判断紧张、气息或音色好坏。
+                </p>
+                <p>
+                  结束一次至少 1.5 秒有效发声的麦克风会话后，平均值、命中率、波动和时长会保存为本机摘要。摘要不包含录音。
+                </p>
+              </div>
+            </section>
+
+            <section id="privacy">
+              <span class="guide-number">05</span>
+              <div>
+                <h2>隐私与录音</h2>
+                <p>
+                  麦克风音频由浏览器的 Web Audio API 在页面内实时分析，不上传服务器。VoxBloom 没有账号、分析埋点或远程数据库。
+                </p>
+                <ul class="guide-list">
+                  <li>录音片段只保存在当前页面内存，刷新或关闭页面后消失。</li>
+                  <li>练习摘要保存于本机 localStorage，不包含音频。</li>
+                  <li>你可以导出 CSV，或随时清空本机练习摘要。</li>
+                  <li>浏览器和设备操作系统仍可能拥有自己的音频处理与隐私设置。</li>
+                </ul>
+              </div>
+            </section>
+
+            <section id="safety">
+              <span class="guide-number">06</span>
+              <div>
+                <h2>舒适与安全</h2>
+                <p>
+                  VoxBloom 不是语音治疗或医疗设备。若有声音疲劳、疼痛、持续嘶哑、吞咽困难或呼吸不适，应停止练习并寻求合格医疗或言语治疗专业人员帮助。
+                </p>
+                <div class="guide-callout">
+                  <strong>不要把疼痛当作训练强度。</strong>
+                  <p>短时、规律、舒适的练习比长时间用力更容易持续。</p>
+                </div>
+                <p>
+                  音高检测采用
+                  <a href="https://github.com/ianprime0509/pitchy" target="_blank" rel="noreferrer">Pitchy</a>
+                  的 McLeod Pitch Method 实现。实时分析依赖浏览器的
+                  <a href="https://www.w3.org/TR/webaudio/" target="_blank" rel="noreferrer">Web Audio API</a>。
+                </p>
+              </div>
+            </section>
+
+            <div class="guide-endnote">
+              <i data-lucide="shield-check"></i>
+              <p>录音与指标只用于个人观察。任何声音目标都应由使用者自己定义，专业建议应来自了解你完整情况的合格人员。</p>
+            </div>
+          </article>
+        </div>
+      </main>
+
+      <footer class="site-footer">
+        <p>VOXBLOOM v1.1 · 测量说明</p>
+        <p>不评价性别、passability 或治疗效果。</p>
+        <span id="year"></span>
+      </footer>
+    </div>
+  </body>
+</html>
