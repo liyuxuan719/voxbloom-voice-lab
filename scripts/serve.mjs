@@ -1,8 +1,9 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
 import { createServer } from "node:http";
+import { fileURLToPath } from "node:url";
 
-const root = resolve(import.meta.dirname, "..");
+const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const port = Number(process.env.PORT || 4190);
 const host = process.env.HOST || "127.0.0.1";
 const mimeTypes = {
@@ -17,9 +18,11 @@ const mimeTypes = {
 };
 
 function resolvePath(urlPath) {
-  const decoded = decodeURIComponent((urlPath || "/").split("?")[0]).replaceAll("/", sep);
+  let decoded;
+  try { decoded = decodeURIComponent((urlPath || "/").split("?")[0]).replaceAll("/", sep); }
+  catch { return null; }
   let target = resolve(root, `.${decoded}`);
-  if (!target.startsWith(root)) return null;
+  if (target !== root && !target.startsWith(`${root}${sep}`)) return null;
   if (existsSync(target) && statSync(target).isDirectory()) target = join(target, "index.html");
   return target;
 }
@@ -45,5 +48,5 @@ const server = createServer((request, response) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`VoxBloom running at http://${host}:${port}`);
+  console.log(`VoxBloom running at http://${host}:${server.address().port}`);
 });

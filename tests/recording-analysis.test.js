@@ -57,3 +57,25 @@ test("A/B comparison returns neutral signed differences", () => {
   assert.equal(comparison.voicedDelta, 1);
   assert.equal(compareRecordingAnalyses(null, {}), null);
 });
+
+test("offline analysis rejects frame options that would loop forever or break the FFT", () => {
+  const samples = new Float32Array(4096);
+  for (const hopSize of [0, -1, 0.5, Infinity, 4096]) {
+    assert.throws(() => analyzeAudioSamples(samples, 48000, { hopSize }), RangeError);
+  }
+  for (const frameSize of [0, 1000, 2048.5, 32768]) {
+    assert.throws(() => analyzeAudioSamples(samples, 48000, { frameSize }), RangeError);
+  }
+});
+
+test("offline pitch variation includes two separated octave tones", () => {
+  const sampleRate = 48000;
+  const first = sineWave(110, sampleRate, 0.5);
+  const second = sineWave(220, sampleRate, 0.5);
+  const samples = new Float32Array(first.length + second.length);
+  samples.set(first);
+  samples.set(second, first.length);
+  const analysis = analyzeAudioSamples(samples, sampleRate, { targetLow: 100, targetHigh: 230 });
+  assert.ok(analysis.pitchDeviationCents > 500);
+  assert.ok(analysis.pitchDeviationCents < 700);
+});

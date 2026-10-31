@@ -14,10 +14,19 @@ import {
   compareRecordingAnalyses,
   mixChannels,
 } from "../src/recording-analysis.js";
+import {
+  HISTORY_LIMIT,
+  MAX_AUDIO_BYTES,
+  MAX_AUDIO_SECONDS,
+  createHistoryBackup,
+  normalizeHistory,
+  normalizeSettings,
+  recordingExtension,
+  restoreHistoryBackup,
+} from "../src/practice-data.js";
 
 const SETTINGS_KEY = "voxbloom-settings-v1";
 const HISTORY_KEY = "voxbloom-history-v1";
-const HISTORY_LIMIT = 12;
 const RECORDING_LIMIT_MS = 15000;
 const HISTORY_WINDOW_SECONDS = 30;
 const analysisPending = new Map();
@@ -93,6 +102,8 @@ const elements = {
   compareHit: document.querySelector("#compare-hit"),
   compareVoiced: document.querySelector("#compare-voiced"),
   exportHistoryButton: document.querySelector("#export-history-button"),
+  backupHistoryButton: document.querySelector("#backup-history-button"),
+  restoreHistoryInput: document.querySelector("#restore-history-input"),
   clearHistoryButton: document.querySelector("#clear-history-button"),
   historyList: document.querySelector("#history-list"),
   historyEmpty: document.querySelector("#history-empty"),
@@ -112,6 +123,7 @@ const clipElements = {
     download: document.querySelector("#clip-a-download"),
     recordButton: document.querySelector('[data-record-slot="A"]'),
     deleteButton: document.querySelector('[data-delete-slot="A"]'),
+    importInput: document.querySelector("#clip-a-import"),
   },
   B: {
     card: document.querySelector('[data-clip-slot="B"]'),
@@ -123,19 +135,12 @@ const clipElements = {
     download: document.querySelector("#clip-b-download"),
     recordButton: document.querySelector('[data-record-slot="B"]'),
     deleteButton: document.querySelector('[data-delete-slot="B"]'),
+    importInput: document.querySelector("#clip-b-import"),
   },
 };
 
 const storedSettings = readStoredJson(SETTINGS_KEY, {});
-const settings = {
-  targetLow: clamp(Number(storedSettings.targetLow) || 145, 70, 330),
-  targetHigh: clamp(Number(storedSettings.targetHigh) || 220, 80, 400),
-  smoothing: storedSettings.smoothing !== false,
-  mode: PRACTICE_MODES[storedSettings.mode] ? storedSettings.mode : "sustain",
-  goalSeconds: [10, 15, 30].includes(Number(storedSettings.goalSeconds))
-    ? Number(storedSettings.goalSeconds)
-    : 15,
-};
+const settings = normalizeSettings(storedSettings);
 
 const state = {
   audioContext: null,
@@ -146,6 +151,8 @@ const state = {
   timeData: null,
   frequencyData: null,
   running: false,
+  starting: false,
+  microphoneRequest: 0,
   processingFrame: null,
   sessionStartedAt: null,
   lastFrameAt: null,
@@ -159,8 +166,10 @@ const state = {
   lastMetricAt: 0,
   lastVoiceAt: 0,
   goalCelebrated: false,
-  history: readStoredJson(HISTORY_KEY, []),
+  history: normalizeHistory(readStoredJson(HISTORY_KEY, [])),
   clips: { A: null, B: null },
+  clipRequests: { A: 0, B: 0 },
+  clipBusy: { A: false, B: false },
   recording: false,
   recordingSlot: null,
   recorder: null,
@@ -288,6 +297,7 @@ function createIcons() {
 }
 
 async function startMicrophone() {
+  if (state.starting) return;
   if (state.running) {
     stopMicrophone();
     return;
@@ -303,7 +313,10 @@ async function startMicrophone() {
   }
 
   setMicrophoneUi("正在请求麦克风权限");
+  state.starting = true;
+  const request = ++state.microphoneRequest;
   elements.microphoneButton.disabled = true;
+  elements.stageMicButton.disabled = true;
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -314,12 +327,20 @@ async function startMicrophone() {
         channelCount: 1,
       },
     });
+    if (request !== state.microphoneRequest) {
+      for (const track of stream.getTracks()) track.stop();
+      return;
+    }
+    state.mediaStream = stream;
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) throw new Error("Web Audio API is unavailable.");
 
-    state.mediaStream = stream;
     state.audioContext = new AudioContextClass({ latencyHint: "interactive" });
     await state.audioContext.resume();
+    if (request !== state.microphoneRequest) {
+      cleanupAudio();
+      return;
+    }
     state.sourceNode = state.audioContext.createMediaStreamSource(stream);
     state.analyser = state.audioContext.createAnalyser();
     state.analyser.fftSize = 2048;
@@ -342,7 +363,9 @@ async function startMicrophone() {
     showToast(denied ? "麦克风权限被拒绝" : "麦克风启动失败");
     cleanupAudio();
   } finally {
+    state.starting = false;
     elements.microphoneButton.disabled = false;
+    elements.stageMicButton.disabled = false;
   }
 }
 
@@ -419,7 +442,7 @@ function processAudioFrame(timestamp) {
       ? smoothValue(state.displayPitch, pitch, 0.2)
       : pitch;
     state.voicedSeconds += deltaSeconds;
-    state.sessionPitches.push(state.displayPitch);
+    state.sessionPitches.push(pitch);
     if (state.sessionPitches.length > 12000) state.sessionPitches.shift();
     state.pitchHistory.push({
       time: elapsed,
@@ -554,6 +577,7 @@ function finalizeSession() {
     pitchDeviationCents: Number(statistics.pitchDeviationCents.toFixed(2)),
     voicedSeconds: Number(state.voicedSeconds.toFixed(2)),
     goalSeconds: settings.goalSeconds,
+    statisticsVersion: 2,
   });
   state.history = state.history.slice(0, HISTORY_LIMIT);
   storeHistory();
@@ -717,6 +741,7 @@ function chooseRecordingMimeType() {
 }
 
 async function startRecording(slot) {
+  if (state.clipBusy[slot]) return;
   if (state.recording) {
     stopRecording();
     return;
@@ -750,10 +775,15 @@ async function startRecording(slot) {
     recorder.addEventListener("dataavailable", (event) => {
       if (event.data.size) chunks.push(event.data);
     });
+    const targets = { ...state.recordingTargets };
+    const microphoneRequest = state.microphoneRequest;
     recorder.addEventListener("stop", async () => {
       const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
-      await installRecording(slot, blob, recorder.mimeType);
+      const duration = (performance.now() - state.recordingStartedAt) / 1000;
       clearRecordingState();
+      if (microphoneRequest === state.microphoneRequest) {
+        await installRecording(slot, blob, recorder.mimeType, { targets, duration });
+      }
     });
     recorder.start(250);
     state.recordingTimer = window.setTimeout(stopRecording, RECORDING_LIMIT_MS);
@@ -776,7 +806,8 @@ function updateRecordingUi() {
     const recordingThis = state.recording && state.recordingSlot === slot;
     button.classList.toggle("is-recording", recordingThis);
     button.querySelector("span").textContent = recordingThis ? `停止 ${slot}` : `录制 ${slot}`;
-    button.disabled = state.recording && !recordingThis;
+    button.disabled = state.clipBusy[slot] || (state.recording && !recordingThis);
+    clipElements[slot].importInput.disabled = state.recording || state.clipBusy[slot];
   }
   if (state.recording) {
     requestAnimationFrame(updateRecordingUi);
@@ -803,31 +834,41 @@ function clearRecordingState() {
   elements.recordingBar.classList.remove("is-recording");
   elements.recordingStatus.textContent = "选择一个片段开始录音，单段最长 15 秒。";
   for (const slot of ["A", "B"]) {
-    clipElements[slot].recordButton.disabled = false;
+    clipElements[slot].recordButton.disabled = state.clipBusy[slot];
+    clipElements[slot].importInput.disabled = state.clipBusy[slot];
     clipElements[slot].recordButton.classList.remove("is-recording");
     clipElements[slot].recordButton.querySelector("span").textContent = `录制 ${slot}`;
   }
 }
 
-async function installRecording(slot, blob, mimeType) {
-  const clip = state.clips[slot];
-  if (clip?.url) URL.revokeObjectURL(clip.url);
-
-  const extension = mimeType?.includes("mp4") ? "m4a" : "webm";
-  const url = URL.createObjectURL(blob);
+async function installRecording(slot, blob, mimeType, options = {}) {
+  if (!blob.size || blob.size > MAX_AUDIO_BYTES) {
+    showToast("请选择非空且不超过 20 MB 的音频文件");
+    return;
+  }
+  const request = ++state.clipRequests[slot];
+  state.clipBusy[slot] = true;
+  const refs = clipElements[slot];
+  refs.recordButton.disabled = true;
+  refs.importInput.disabled = true;
+  refs.badge.textContent = "正在本地分析";
   let waveform = new Array(64).fill(0.03);
-  let duration = Number((performance.now() - state.recordingStartedAt) / 1000);
+  let duration = options.duration || 0;
   let analysis = null;
-  const targets = state.recordingTargets || {
+  const targets = options.targets || {
     low: settings.targetLow,
     high: settings.targetHigh,
   };
-
+  let context = null;
   try {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    const context = state.audioContext || new AudioContextClass();
+    // A dedicated decoder stays valid if the live microphone is stopped mid-import.
+    context = new AudioContextClass();
     const decoded = await context.decodeAudioData(await blob.arrayBuffer());
     duration = decoded.duration;
+    if (!Number.isFinite(duration) || duration <= 0 || duration > MAX_AUDIO_SECONDS) {
+      throw new Error("音频长度应为 0–120 秒");
+    }
     waveform = downsamplePeaks(decoded.getChannelData(0), 64);
     const channels = Array.from(
       { length: decoded.numberOfChannels },
@@ -835,24 +876,44 @@ async function installRecording(slot, blob, mimeType) {
     );
     const mono = mixChannels(channels);
     analysis = await analyzeRecordingAsync(mono, decoded.sampleRate, targets);
-    if (context !== state.audioContext) await context.close();
-  } catch {
-    // Playback still works when offline pitch analysis is unavailable.
+  } catch (error) {
+    if (request === state.clipRequests[slot]) {
+      showToast(error?.message === "音频长度应为 0–120 秒" ? error.message : "无法解码或分析该音频，请尝试 WAV、MP3、M4A、OGG 或 WebM");
+    }
+    // A browser may record a playable format that its Web Audio decoder rejects.
+    // Keep microphone clips downloadable; imports must decode before replacing a clip.
+    if (options.imported || !duration || duration > MAX_AUDIO_SECONDS) return;
+  } finally {
+    if (context && context.state !== "closed") await context.close().catch(() => {});
+    if (request === state.clipRequests[slot]) {
+      state.clipBusy[slot] = false;
+      refs.recordButton.disabled = state.recording;
+      refs.importInput.disabled = state.recording;
+      renderClip(slot);
+    }
   }
-
+  if (request !== state.clipRequests[slot]) return;
+  const clip = state.clips[slot];
+  refs.audio.pause();
+  if (clip?.url) URL.revokeObjectURL(clip.url);
   state.clips[slot] = {
     blob,
-    url,
+    url: URL.createObjectURL(blob),
     duration,
     waveform,
-    extension,
+    extension: recordingExtension(mimeType, options.fileName),
     analysis,
     targetLow: Math.round(targets.low),
     targetHigh: Math.round(targets.high),
   };
   renderClip(slot);
   renderAbComparison();
-  showToast(`片段 ${slot} 已录制，只保存在当前页面`);
+  showToast(`片段 ${slot} 已${options.imported ? "导入" : "录制"}，只保存在当前页面`);
+}
+
+async function importRecording(slot, file) {
+  if (!file || state.recording || state.clipBusy[slot]) return;
+  await installRecording(slot, file, file.type, { imported: true, fileName: file.name });
 }
 
 function getAnalysisWorker() {
@@ -930,7 +991,7 @@ function renderClip(slot) {
   const hasClip = Boolean(clip);
   refs.card.classList.toggle("has-recording", hasClip);
   refs.badge.textContent = hasClip ? "LOCAL CLIP" : "EMPTY";
-  refs.duration.textContent = hasClip ? `${clip.duration.toFixed(1)} 秒 · 仅本页` : "尚未录音";
+  refs.duration.textContent = hasClip ? `${clip.duration.toFixed(1)} 秒 · ${clip.targetLow}–${clip.targetHigh} Hz · 仅本页` : "尚未录音或导入";
   refs.audio.hidden = !hasClip;
   refs.download.hidden = !hasClip;
   refs.deleteButton.hidden = !hasClip;
@@ -981,7 +1042,8 @@ function renderAbComparison() {
 
   elements.comparePitch.textContent = formatSigned(comparison.pitchDelta, " Hz");
   elements.compareDeviation.textContent = formatSigned(comparison.deviationDelta, " ct");
-  elements.compareHit.textContent = formatSigned(comparison.targetHitDelta, " pt", 1);
+  const sameTargets = state.clips.A.targetLow === state.clips.B.targetLow && state.clips.A.targetHigh === state.clips.B.targetHigh;
+  elements.compareHit.textContent = sameTargets ? formatSigned(comparison.targetHitDelta, " pt", 1) : "区间不同";
   elements.compareVoiced.textContent = formatSigned(comparison.voicedDelta, " s", 1);
 }
 
@@ -1013,6 +1075,10 @@ function drawWaveform(canvas, peaks, color) {
 }
 
 function deleteClip(slot) {
+  state.clipRequests[slot] += 1;
+  state.clipBusy[slot] = false;
+  clipElements[slot].recordButton.disabled = state.recording;
+  clipElements[slot].importInput.disabled = state.recording;
   const clip = state.clips[slot];
   if (!clip) return;
   clipElements[slot].audio.pause();
@@ -1062,7 +1128,7 @@ function renderHistory() {
     subline.className = "history-subline";
     subline.textContent = `命中 ${Math.round(session.targetHitRatio * 100)}% · 波动 ±${Math.round(
       session.pitchDeviationCents,
-    )} ct · ${session.voicedSeconds.toFixed(1)} s`;
+    )} ct${session.statisticsVersion === 1 ? "（旧算法）" : ""} · ${session.voicedSeconds.toFixed(1)} s`;
 
     item.append(date, main, subline);
     fragment.append(item);
@@ -1118,6 +1184,7 @@ function exportHistory() {
       "pitch_deviation_cents",
       "voiced_seconds",
       "goal_seconds",
+      "statistics_version",
     ],
     ...state.history.map((session) => [
       session.timestamp,
@@ -1129,6 +1196,7 @@ function exportHistory() {
       session.pitchDeviationCents,
       session.voicedSeconds,
       session.goalSeconds || "",
+      session.statisticsVersion || 1,
     ]),
   ];
   const csv = rows
@@ -1141,6 +1209,31 @@ function exportHistory() {
   link.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   showToast("练习摘要已导出");
+}
+
+function backupHistory() {
+  const url = URL.createObjectURL(new Blob([createHistoryBackup(state.history)], { type: "application/json" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "voxbloom-history-v2.json";
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast("摘要备份已导出，不包含录音");
+}
+
+async function restoreHistory(file) {
+  if (!file) return;
+  try {
+    if (file.size > 1024 * 1024) throw new Error("备份文件应小于 1 MB");
+    const history = restoreHistoryBackup(await file.text(), state.history);
+    // Persist first; do not claim a successful restore if browser storage is full.
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    state.history = history;
+    renderHistory();
+    showToast(`摘要已合并，保留最近 ${HISTORY_LIMIT} 条；重复记录不会新增`);
+  } catch (error) {
+    showToast(error?.name === "QuotaExceededError" ? "本机存储空间不足，摘要未导入" : error.message || "备份导入失败");
+  }
 }
 
 function setPracticeMode(mode) {
@@ -1189,6 +1282,11 @@ function setupRecording() {
     const refs = clipElements[slot];
     refs.recordButton.addEventListener("click", () => startRecording(slot));
     refs.deleteButton.addEventListener("click", () => deleteClip(slot));
+    refs.importInput.addEventListener("change", async () => {
+      const file = refs.importInput.files?.[0];
+      refs.importInput.value = "";
+      await importRecording(slot, file);
+    });
     renderClip(slot);
   }
   elements.stopRecordingButton.addEventListener("click", stopRecording);
@@ -1224,12 +1322,20 @@ function registerServiceWorker() {
 
 function setupVisibilityCleanup() {
   window.addEventListener("pagehide", () => {
+    state.microphoneRequest += 1;
     if (state.recording) stopRecording();
     cleanupAudio();
     for (const slot of ["A", "B"]) {
+      state.clipRequests[slot] += 1;
+      state.clipBusy[slot] = false;
       const clip = state.clips[slot];
       if (clip?.url) URL.revokeObjectURL(clip.url);
+      state.clips[slot] = null;
+      clipElements[slot].recordButton.disabled = false;
+      clipElements[slot].importInput.disabled = false;
+      renderClip(slot);
     }
+    renderAbComparison();
   });
 }
 
@@ -1254,6 +1360,12 @@ function init() {
     showToast(PRACTICE_MODES[settings.mode].toast);
   });
   elements.exportHistoryButton.addEventListener("click", exportHistory);
+  elements.backupHistoryButton.addEventListener("click", backupHistory);
+  elements.restoreHistoryInput.addEventListener("change", async () => {
+    const file = elements.restoreHistoryInput.files?.[0];
+    elements.restoreHistoryInput.value = "";
+    await restoreHistory(file);
+  });
   elements.clearHistoryButton.addEventListener("click", handleClearHistory);
   window.addEventListener("resize", () => {
     drawVoiceCanvas();
