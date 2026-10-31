@@ -19,6 +19,12 @@ export function analyzeAudioSamples(
   sampleRate,
   { targetLow = 145, targetHigh = 220, frameSize = 2048, hopSize = 2048 } = {},
 ) {
+  if (!Number.isInteger(frameSize) || frameSize < 256 || frameSize > 16384 || (frameSize & (frameSize - 1)) !== 0) {
+    throw new RangeError("frameSize must be a power of two between 256 and 16384");
+  }
+  if (!Number.isInteger(hopSize) || hopSize < 1 || hopSize > frameSize) {
+    throw new RangeError("hopSize must be an integer between 1 and frameSize");
+  }
   if (!samples?.length || !Number.isFinite(sampleRate) || sampleRate <= 0) {
     return {
       averagePitch: null,

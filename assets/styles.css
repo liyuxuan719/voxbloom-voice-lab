@@ -2055,3 +2055,10 @@ button:active {
     animation-iteration-count: 1 !important;
   }
 }
+/* File inputs remain keyboard accessible while sharing the existing action style. */
+.file-import { position: relative; cursor: pointer; }
+.file-import input[type="file"] { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+.file-import:focus-within { outline: 2px solid #6f967d; outline-offset: 3px; border-radius: 4px; }
+.file-import:has(input:disabled) { opacity: .5; cursor: wait; }
+.clip-actions, .history-actions { flex-wrap: wrap; }
+.history-note { color: #756d60; font-size: .8rem; line-height: 1.7; margin-top: 1rem; }

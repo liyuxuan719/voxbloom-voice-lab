@@ -103,7 +103,9 @@ export function sessionStatistics(pitches, targetLow, targetHigh) {
     };
   }
 
-  const centsOffsets = valid.map((pitch) => describePitch(pitch).cents);
+  // Use one fixed reference so note boundaries and octave jumps are preserved.
+  // Standard deviation is independent of the reference pitch chosen here.
+  const centsOffsets = valid.map((pitch) => 1200 * Math.log2(pitch / 440));
   const boundaryTolerance = Math.max(0.25, (targetHigh - targetLow) * 0.01);
   const hits = valid.filter(
     (pitch) =>

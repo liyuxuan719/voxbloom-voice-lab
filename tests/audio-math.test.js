@@ -79,3 +79,15 @@ test("standard deviation and waveform peak downsampling are stable", () => {
   assert.equal(Math.max(...peaks), 1);
   assert.deepEqual(downsamplePeaks([], 3), []);
 });
+
+test("pitch deviation preserves octave changes rather than rounding every note independently", () => {
+  closeTo(sessionStatistics([110, 220], 100, 250).pitchDeviationCents, 600);
+  closeTo(sessionStatistics([220, 440], 100, 450).pitchDeviationCents, 600);
+  closeTo(sessionStatistics([220, 220, 220], 100, 250).pitchDeviationCents, 0);
+});
+
+test("pitch deviation is continuous across the nearest-note boundary", () => {
+  const midpoint = 440 * 2 ** (0.5 / 12);
+  const deviation = sessionStatistics([midpoint - 0.1, midpoint + 0.1], 400, 480).pitchDeviationCents;
+  assert.ok(deviation < 1, "a tiny pitch movement must not become a 100-cent jump");
+});
